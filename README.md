@@ -27,7 +27,7 @@ myJob := lifespan.Job{
 	},
 }
 
-myJob.Execute()
+myJob.RunWithClose()
 ```
 
 By default, the function defined for lifespan.Job.Close will trigger when a syscall.SIGINT or
@@ -44,6 +44,6 @@ myJob := lifespan.Job{
 	Signals: []os.Signal{syscall.SIGHUP},
 }
 
-myJob.Execute()
+myJob.RunWithClose()
 ```
 
