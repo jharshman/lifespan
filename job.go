@@ -36,6 +36,7 @@ import (
 	"context"
 	"os"
 	"os/signal"
+	"syscall"
 )
 
 // SafeCloser defines the behavior expected for a Job or other SafeCloser implementation.
@@ -49,8 +50,8 @@ type SafeCloser interface {
 // function.
 type Job struct {
 	// Run And Close functions.
-	Run   func(ctx context.Context) error
-	Close func(ctx context.Context) error
+	Run   func() error
+	Close func() error
 	// Signals is a slice of os.Signal to notify on.
 	Signals []os.Signal
 }
@@ -65,17 +66,23 @@ func (j *Job) RunWithClose(ctx context.Context) (err chan error) {
 	err = make(chan error, 1)
 
 	closeChan := make(chan os.Signal, 1)
+	if len(j.Signals) == 0 {
+		j.Signals = []os.Signal{
+			syscall.SIGINT,
+			syscall.SIGTERM,
+		}
+	}
 	signal.Notify(closeChan, j.Signals...)
 
 	// Run and Close
 	go func() {
 		go func() {
-			if e := j.Run(ctx); e != nil {
+			if e := j.Run(); e != nil {
 				err <- e
 			}
 		}()
 		<-sig
-		if e := j.Close(ctx); e != nil {
+		if e := j.Close(); e != nil {
 			err <- e
 		}
 		ack <- 1
@@ -89,6 +96,8 @@ func (j *Job) RunWithClose(ctx context.Context) (err chan error) {
 			case <-closeChan:
 				sig <- 1
 			case <-ack:
+				break LOOP
+			case <-ctx.Done():
 				break LOOP
 			}
 		}
