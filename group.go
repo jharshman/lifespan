@@ -1,9 +1,14 @@
 package lifespan
 
-import "context"
+import (
+	"context"
+
+	"github.com/google/uuid"
+)
 
 // Group defines a grouping of Runnable jobs and LifeSpans.
 type Group struct {
+	UUID   uuid.UUID
 	Jobs   []Runnable
 	Spans  []*LifeSpan
 	Ctx    context.Context
@@ -13,7 +18,9 @@ type Group struct {
 // NewGroup returns a pointer to a *Group holding the Runnable jobs.
 func NewGroup(jobs ...Runnable) *Group {
 	ctx, cancel := context.WithCancel(context.Background())
+	id := uuid.New()
 	return &Group{
+		UUID:   id,
 		Jobs:   jobs,
 		Ctx:    ctx,
 		Cancel: cancel,

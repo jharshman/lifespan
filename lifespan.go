@@ -4,6 +4,8 @@ import (
 	"context"
 	"log/slog"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 // Runnable defines the behavior of a runnable task.
@@ -13,6 +15,7 @@ type Runnable interface {
 
 // LifeSpan holds the communication channels and context for a runnable task.
 type LifeSpan struct {
+	UUID     uuid.UUID
 	Sig, Ack chan struct{}
 	Err      chan error
 	Ctx      context.Context
@@ -37,8 +40,10 @@ func (span *LifeSpan) Close() {
 // Run runs the passed in job and returns a pointer to a LifeSpan.
 func Run(job func(span *LifeSpan)) (span *LifeSpan) {
 	ctx, cancel := context.WithCancel(context.Background())
+	id := uuid.New()
 
 	span = &LifeSpan{
+		UUID:   id,
 		Sig:    make(chan struct{}, 1),
 		Ack:    make(chan struct{}, 1),
 		Err:    make(chan error, 1),
