@@ -73,7 +73,7 @@ Here we demonstrate different ways to use the custom Job we defined.
 4. Stopping select jobs from a group.
 5. Stopping remaining jobs in a group.
 
-```
+```golang
 func main() {
 
 	j1 := &Job{}
