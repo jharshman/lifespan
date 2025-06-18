@@ -8,7 +8,7 @@ import (
 
 // Group defines a grouping of Runnable jobs and LifeSpans.
 type Group struct {
-	UUID   uuid.UUID
+	UUID   string
 	Jobs   []Runnable
 	Spans  []*LifeSpan
 	Ctx    context.Context
@@ -20,7 +20,7 @@ func NewGroup(jobs ...Runnable) *Group {
 	ctx, cancel := context.WithCancel(context.Background())
 	id := uuid.New()
 	return &Group{
-		UUID:   id,
+		UUID:   id.String(),
 		Jobs:   jobs,
 		Ctx:    ctx,
 		Cancel: cancel,
