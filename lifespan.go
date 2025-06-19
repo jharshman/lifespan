@@ -15,7 +15,7 @@ type Runnable interface {
 
 // LifeSpan holds the communication channels and context for a runnable task.
 type LifeSpan struct {
-	UUID     uuid.UUID
+	UUID     string
 	Sig, Ack chan struct{}
 	Err      chan error
 	Ctx      context.Context
@@ -43,7 +43,7 @@ func Run(job func(span *LifeSpan)) (span *LifeSpan) {
 	id := uuid.New()
 
 	span = &LifeSpan{
-		UUID:   id,
+		UUID:   id.String(),
 		Sig:    make(chan struct{}, 1),
 		Ack:    make(chan struct{}, 1),
 		Err:    make(chan error, 1),
