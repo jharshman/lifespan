@@ -18,7 +18,7 @@ until it is signaled to close.
 
 ```golang
 func main() {
-	span := lifespan.Run(func(span *lifespan.LifeSpan) {
+	span := lifespan.Run(nil, func(span *lifespan.LifeSpan) {
 	LOOP:
 		for {
 			select {
@@ -47,7 +47,7 @@ is similar to the previous example except here we are demonstrating that each Li
 ```golang
 type Job struct{}
 
-func (j *Job) Run(span *lifespan.LifeSpan) {
+func (j *Job) Run(nil, span *lifespan.LifeSpan) {
 LOOP:
 	for {
 		select {
@@ -77,23 +77,23 @@ Here we demonstrate different ways to use the custom Job we defined.
 func main() {
 
 	j1 := &Job{}
-
-    // 1. Running a job and responding to an os.Signal like SIGTERM or SIGINT
+	
+	// 1. Running a job and responding to an os.Signal like SIGTERM or SIGINT
 
 	span := lifespan.Run(j1.Run)
 	notify := make(chan os.Signal, 1)
 	signal.Notify(notify, syscall.SIGTERM, syscall.SIGINT)
 	<-notify
 	span.Close()
-
-    // 2. Running a job and responding to a context timeout
+	
+	// 2. Running a job and responding to a context timeout
 
 	span = lifespan.Run(j1.Run)
 	// lifespans have contexts and cancel functions. Here we overwrite them with a timeout.
     // We wait for the timeout which will send an Ack once the goroutine has finished.
 	span.Ctx, span.Cancel = context.WithTimeout(span.Ctx, 5*time.Second)
 	<-span.Ack
-
+	
 	// 3. Creating a group of jobs
 
 	j2 := &Job{}
@@ -105,20 +105,24 @@ func main() {
 	group.Start()
 
 	time.Sleep(3 * time.Second)
-
+	
 	// 4. Stopping individual jobs within a group
 
 	group.Spans[3].Close()
 	group.Spans[4].Close()
 
 	time.Sleep(3 * time.Second)
-
+	
 	// 5. Stop remaining jobs in group
 
 	group.Close()
 	fmt.Println("all done")
 }
 ```
+
+## Message Aggregation
+
+Lifespan provides methods of Log and Error aggregation via an internal Message Bus.
 
 ## Contributing
 

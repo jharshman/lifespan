@@ -8,8 +8,11 @@ import (
 
 // Group defines a grouping of Runnable jobs and LifeSpans.
 type Group struct {
-	UUID   string
-	Jobs   []Runnable
+	// UUID identifies a Group of Runnable. Useful for attributing logs and errors to a group.
+	UUID string
+	// Jobs an array of Runnable
+	Jobs []Runnable
+	// Array of *LifeSpan
 	Spans  []*LifeSpan
 	Ctx    context.Context
 	Cancel context.CancelFunc
@@ -30,7 +33,7 @@ func NewGroup(jobs ...Runnable) *Group {
 // Start executes the group of Jobs, storing each Job's LifeSpan in the Group structure.
 func (group *Group) Start() {
 	for _, job := range group.Jobs {
-		span := Run(func(span *LifeSpan) {
+		span := Run(nil, nil, func(span *LifeSpan) {
 			job.Run(span)
 		})
 		group.Spans = append(group.Spans, span)
