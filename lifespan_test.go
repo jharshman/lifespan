@@ -10,7 +10,7 @@ import (
 
 func Test_Run(t *testing.T) {
 
-	span := lifespan.Run(nil, nil, func(span *lifespan.LifeSpan) {
+	span := lifespan.Run(nil, func(span *lifespan.LifeSpan) {
 		t.Logf("started job: %s", span.UUID)
 	LOOP:
 		for {
@@ -31,7 +31,6 @@ func Test_Run(t *testing.T) {
 	assert.NotNil(t, span.Sig)
 	assert.NotNil(t, span.Ack)
 	assert.Nil(t, span.ErrBus)
-	assert.Nil(t, span.LogBus)
 	assert.NotNil(t, span.Ctx)
 	assert.NotNil(t, span.Cancel)
 
@@ -41,12 +40,10 @@ func Test_Run(t *testing.T) {
 
 func Test_RunWithErrorBus(t *testing.T) {
 
-	// create a Message Bus for errors
-	bus := &lifespan.ErrorBus{
-		Bus: make(chan lifespan.Error, 10),
-	}
+	// create a Message bus for errors
+	bus := lifespan.NewErrorBus(1024)
 
-	span := lifespan.Run(nil, bus, func(span *lifespan.LifeSpan) {
+	span := lifespan.Run(bus, func(span *lifespan.LifeSpan) {
 		t.Logf("started job: %s", span.UUID)
 	LOOP:
 		for {
@@ -90,12 +87,10 @@ func Test_RunWithErrorBus(t *testing.T) {
 }
 
 func Test_RunWithMoreJobsAndErrors(t *testing.T) {
-	// create a Message Bus for errors
-	bus := &lifespan.ErrorBus{
-		Bus: make(chan lifespan.Error, 10),
-	}
+	// create a Message bus for errors
+	bus := lifespan.NewErrorBus(1024)
 
-	span1 := lifespan.Run(nil, bus, func(span *lifespan.LifeSpan) {
+	span1 := lifespan.Run(bus, func(span *lifespan.LifeSpan) {
 		t.Logf("started job: %s", span.UUID)
 	LOOP:
 		for {
@@ -114,7 +109,7 @@ func Test_RunWithMoreJobsAndErrors(t *testing.T) {
 		span.Ack <- struct{}{}
 	})
 
-	span2 := lifespan.Run(nil, bus, func(span *lifespan.LifeSpan) {
+	span2 := lifespan.Run(bus, func(span *lifespan.LifeSpan) {
 		t.Logf("started job: %s", span.UUID)
 	LOOP:
 		for {

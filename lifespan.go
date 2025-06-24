@@ -21,8 +21,6 @@ type LifeSpan struct {
 	Sig, Ack chan struct{}
 	// ErrBus is an implementation of MessageBus[any T] which is shared across all Runnable implementations.
 	ErrBus MessageBus[Error]
-	// LogBus is an implementation of MessageBus[any T] which much like ErrBus is shared.
-	LogBus MessageBus[Log]
 	Ctx    context.Context
 	Cancel context.CancelFunc
 }
@@ -43,7 +41,7 @@ func (span *LifeSpan) Close() {
 }
 
 // Run runs the passed in job and returns a pointer to a LifeSpan.
-func Run(logBus MessageBus[Log], errBus MessageBus[Error], job func(span *LifeSpan)) (span *LifeSpan) {
+func Run(errBus MessageBus[Error], job func(span *LifeSpan)) (span *LifeSpan) {
 	ctx, cancel := context.WithCancel(context.Background())
 	id := uuid.New()
 
@@ -52,7 +50,6 @@ func Run(logBus MessageBus[Log], errBus MessageBus[Error], job func(span *LifeSp
 		Sig:    make(chan struct{}, 1),
 		Ack:    make(chan struct{}, 1),
 		ErrBus: errBus,
-		LogBus: logBus,
 		Ctx:    ctx,
 		Cancel: cancel,
 	}
