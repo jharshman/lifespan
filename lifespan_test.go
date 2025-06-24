@@ -2,16 +2,22 @@ package lifespan_test
 
 import (
 	"errors"
+	"fmt"
+	"log/slog"
+	"testing"
+
 	"github.com/jharshman/lifespan"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"testing"
 )
 
 func Test_Run(t *testing.T) {
 
-	span := lifespan.Run(nil, func(span *lifespan.LifeSpan) {
-		t.Logf("started job: %s", span.UUID)
+	logHandler := lifespan.NewLogger(0, &lifespan.Options{Level: slog.LevelInfo})
+
+	span := lifespan.Run(logHandler, nil, func(span *lifespan.LifeSpan) {
+		span.Logger.Info("testing")
+		//slog.Info("testing", "started job: %s", span.UUID)
 	LOOP:
 		for {
 			select {
@@ -36,14 +42,16 @@ func Test_Run(t *testing.T) {
 
 	// close the span
 	span.Close()
+	fmt.Println(<-logHandler.Bus().Subscribe())
 }
 
 func Test_RunWithErrorBus(t *testing.T) {
 
 	// create a Message bus for errors
 	bus := lifespan.NewErrorBus(1024)
+	logHandler := lifespan.NewLogger(0, &lifespan.Options{Level: slog.LevelInfo})
 
-	span := lifespan.Run(bus, func(span *lifespan.LifeSpan) {
+	span := lifespan.Run(logHandler, bus, func(span *lifespan.LifeSpan) {
 		t.Logf("started job: %s", span.UUID)
 	LOOP:
 		for {
@@ -89,8 +97,9 @@ func Test_RunWithErrorBus(t *testing.T) {
 func Test_RunWithMoreJobsAndErrors(t *testing.T) {
 	// create a Message bus for errors
 	bus := lifespan.NewErrorBus(1024)
+	logHandler := lifespan.NewLogger(0, &lifespan.Options{Level: slog.LevelInfo})
 
-	span1 := lifespan.Run(bus, func(span *lifespan.LifeSpan) {
+	span1 := lifespan.Run(logHandler, bus, func(span *lifespan.LifeSpan) {
 		t.Logf("started job: %s", span.UUID)
 	LOOP:
 		for {
@@ -109,7 +118,7 @@ func Test_RunWithMoreJobsAndErrors(t *testing.T) {
 		span.Ack <- struct{}{}
 	})
 
-	span2 := lifespan.Run(bus, func(span *lifespan.LifeSpan) {
+	span2 := lifespan.Run(logHandler, bus, func(span *lifespan.LifeSpan) {
 		t.Logf("started job: %s", span.UUID)
 	LOOP:
 		for {
