@@ -17,6 +17,8 @@ type Log struct {
 	JobID     string
 	GroupID   string
 	Msg       string
+	Level     string
+	Metadata  map[string]any
 	Timestamp time.Time
 }
 
@@ -31,46 +33,60 @@ type MessageBus[T any] interface {
 
 // ErrorBus implements the MessageBus interface for the Error type.
 type ErrorBus struct {
-	Bus chan Error
+	bus chan Error
 }
 
-// Publish writes the Error to the Bus.
+// NewErrorBus returns a pointer to ErrorBus with the given buffer size.
+func NewErrorBus(bsize int64) *ErrorBus {
+	return &ErrorBus{
+		bus: make(chan Error, bsize),
+	}
+}
+
+// Publish writes the Error to the bus.
 func (e *ErrorBus) Publish(msg Error) {
 	select {
-	case e.Bus <- msg:
+	case e.bus <- msg:
 	default:
 	}
 }
 
 // Subscribe returns a receive channel for the ErrorBus implementation.
 func (e *ErrorBus) Subscribe() <-chan Error {
-	return e.Bus
+	return e.bus
 }
 
 // Close will close the channel contained within ErrorBus.
 func (e *ErrorBus) Close() {
-	close(e.Bus)
+	close(e.bus)
 }
 
 // LogBus implements the MessageBus interface for the Log type.
 type LogBus struct {
-	Bus chan Log
+	bus chan Log
 }
 
-// Publish writes the Log to the Bus.
+// NewLogBus returns a pointer to *LogBus with the given buffer size.
+func NewLogBus(bsize int64) *LogBus {
+	return &LogBus{
+		bus: make(chan Log, bsize),
+	}
+}
+
+// Publish writes the Log to the bus.
 func (l *LogBus) Publish(msg Log) {
 	select {
-	case l.Bus <- msg:
+	case l.bus <- msg:
 	default:
 	}
 }
 
 // Subscribe returns a receive channel for the LogBus implementation.
 func (l *LogBus) Subscribe() <-chan Log {
-	return l.Bus
+	return l.bus
 }
 
 // Close will close the channel contained within LogBus.
 func (l *LogBus) Close() {
-	close(l.Bus)
+	close(l.bus)
 }
