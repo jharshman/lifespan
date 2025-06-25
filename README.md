@@ -101,8 +101,11 @@ func main() {
 	j4 := &Job{}
 	j5 := &Job{}
 
+	logHandler := lifespan.NewLogger(1024, &lifespan.Options{Level: slog.LevelInfo})
+	errBus := lifespan.NewErrorBus(1024)
+	
 	group := lifespan.NewGroup(j1, j2, j3, j4, j5)
-	group.Start()
+	group.Start(logHandler, errBus)
 
 	time.Sleep(3 * time.Second)
 	
@@ -133,8 +136,8 @@ a central Message Bus that can then be consumed.
 ```golang
 func main() {
 	// Creates a logHandler.
-	// The lifespan implementation of log/slog.Handler will write to an underlying implementation of MessageBus for Logs.
-    logHandler := lifespan.NewLogger(1024, &lifespan.Options{Level: slog.LevelInfo})
+	// The lifespan implementation of log/slog.Handler will write to an underlying implementation of MessageBus for Logs. 
+	logHandler := lifespan.NewLogger(1024, &lifespan.Options{Level: slog.LevelInfo})
 	
 	// Pass the logHandler into the Run function
 	// Run will put the job_id into the logger so every log can be attributed to the job that emitted it.

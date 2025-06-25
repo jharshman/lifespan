@@ -2,6 +2,7 @@ package lifespan
 
 import (
 	"context"
+	"errors"
 
 	"github.com/google/uuid"
 )
@@ -31,13 +32,20 @@ func NewGroup(jobs ...Runnable) *Group {
 }
 
 // Start executes the group of Jobs, storing each Job's LifeSpan in the Group structure.
-func (group *Group) Start() {
+func (group *Group) Start(logHandler *Logger, errBus *ErrorBus) error {
+	if logHandler == nil {
+		return errors.New("nil logHandler")
+	}
+	if errBus == nil {
+		return errors.New("nil errBus")
+	}
 	for _, job := range group.Jobs {
-		span, _ := Run(nil, nil, func(span *LifeSpan) {
+		span, _ := Run(logHandler, errBus, func(span *LifeSpan) {
 			job.Run(span)
 		})
 		group.Spans = append(group.Spans, span)
 	}
+	return nil
 }
 
 // Close will cancel the Group and range over available spans calling each span's Close Method.

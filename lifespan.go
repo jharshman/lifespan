@@ -30,7 +30,7 @@ type LifeSpan struct {
 	Cancel context.CancelFunc
 }
 
-// Close will signal a runnable task to shutdown. If an acknoledgement is not given
+// Close will signal a runnable task to shutdown. If an acknowledgement is not given
 // by the runnable task after 3 seconds, Close will move on.
 func (span *LifeSpan) Close() {
 	select {
