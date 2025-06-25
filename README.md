@@ -1,6 +1,7 @@
 # Lifespan
 [![Go Report Card](https://goreportcard.com/badge/github.com/jharshman/lifespan)](https://goreportcard.com/report/github.com/jharshman/lifespan)
 [![Go Reference](https://pkg.go.dev/badge/github.com/jharshman/lifespan.svg)](https://pkg.go.dev/github.com/jharshman/lifespan)
+[![CI](https://github.com/jharshman/lifespan/actions/workflows/ci.yaml/badge.svg?branch=main)](https://github.com/jharshman/lifespan/actions/workflows/ci.yaml)
 
 ## TL;DR
 

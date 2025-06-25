@@ -83,6 +83,7 @@ func Run(groupID string, logHandler slog.Handler, errBus MessageBus[Error], job 
 	return span, nil
 }
 
+// Error shortcuts publishing to the ErrBus and inserts the JobID and timestamp into the Error.
 func (span *LifeSpan) Error(err error) {
 	e := Error{
 		JobID:     span.UUID,
