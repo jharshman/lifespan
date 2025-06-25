@@ -18,6 +18,8 @@ type Runnable interface {
 type LifeSpan struct {
 	// UUID identifies the Lifespan for a Job. Useful for attributing logs and errors to jobs.
 	UUID string
+	// GroupID identifies the group this LifeSpan belongs to, if any.
+	GroupID string
 	// Sig and Ack are the primary control channels. Write to Sig to signal to close, and read from Ack to acknowledge.
 	Sig, Ack chan struct{}
 	// ErrBus is an implementation of MessageBus[any T] which is shared across all Runnable implementations.
@@ -46,6 +48,7 @@ func (span *LifeSpan) Close() {
 }
 
 // Run runs the passed in job and returns a pointer to a LifeSpan.
+// If groupID is empty, no group_id attribute will be added to the logger.
 func Run(groupID string, logHandler slog.Handler, errBus MessageBus[Error], job func(span *LifeSpan)) (*LifeSpan, error) {
 
 	// logHandler and errBus cannot be nil.
@@ -61,17 +64,22 @@ func Run(groupID string, logHandler slog.Handler, errBus MessageBus[Error], job 
 
 	// include job_id in logger created from logHandler
 	l := slog.New(logHandler)
-	l = l.With(slog.String("job_id", id.String()), slog.String("group_id", groupID))
+	l = l.With(slog.String("job_id", id.String()))
+
+	if groupID != "" {
+		l = l.With(slog.String("group_id", groupID))
+	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	span := &LifeSpan{
-		UUID:   id.String(),
-		Sig:    make(chan struct{}, 1),
-		Ack:    make(chan struct{}, 1),
-		ErrBus: errBus,
-		Logger: l,
-		Ctx:    ctx,
-		Cancel: cancel,
+		UUID:    id.String(),
+		GroupID: groupID,
+		Sig:     make(chan struct{}, 1),
+		Ack:     make(chan struct{}, 1),
+		ErrBus:  errBus,
+		Logger:  l,
+		Ctx:     ctx,
+		Cancel:  cancel,
 	}
 
 	go func() {
@@ -83,11 +91,11 @@ func Run(groupID string, logHandler slog.Handler, errBus MessageBus[Error], job 
 	return span, nil
 }
 
-// Error shortcuts publishing to the ErrBus and inserts the JobID and timestamp into the Error.
+// Error shortcuts publishing to the ErrBus and inserts the JobID, GroupID, and timestamp into the Error.
 func (span *LifeSpan) Error(err error) {
 	e := Error{
 		JobID:     span.UUID,
-		GroupID:   "",
+		GroupID:   span.GroupID,
 		Error:     err,
 		Timestamp: time.Now().UTC(),
 	}
