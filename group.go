@@ -33,7 +33,7 @@ func NewGroup(jobs ...Runnable) *Group {
 // Start executes the group of Jobs, storing each Job's LifeSpan in the Group structure.
 func (group *Group) Start() {
 	for _, job := range group.Jobs {
-		span := Run(nil, nil, func(span *LifeSpan) {
+		span, _ := Run(nil, nil, func(span *LifeSpan) {
 			job.Run(span)
 		})
 		group.Spans = append(group.Spans, span)

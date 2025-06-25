@@ -87,8 +87,6 @@ func (l *Logger) Handle(ctx context.Context, r slog.Record) error {
 	return nil
 }
 
-// Currently not using WithAttrs or WithGroup. In order to satisfy the interface these are included as NO-OPs.
-
 // WithAttrs returns a new logger with the given attributes added to the current attributes.
 func (l *Logger) WithAttrs(attrs []slog.Attr) slog.Handler {
 	// Create a new Logger instance with the same options and bus

@@ -14,10 +14,10 @@ import (
 func Test_Run(t *testing.T) {
 
 	logHandler := lifespan.NewLogger(0, &lifespan.Options{Level: slog.LevelInfo})
+	errBus := lifespan.NewErrorBus(10)
 
-	span := lifespan.Run(logHandler, nil, func(span *lifespan.LifeSpan) {
+	span, _ := lifespan.Run(logHandler, errBus, func(span *lifespan.LifeSpan) {
 		span.Logger.Info("testing")
-		//slog.Info("testing", "started job: %s", span.UUID)
 	LOOP:
 		for {
 			select {
@@ -36,7 +36,7 @@ func Test_Run(t *testing.T) {
 	assert.NotEmpty(t, span.UUID)
 	assert.NotNil(t, span.Sig)
 	assert.NotNil(t, span.Ack)
-	assert.Nil(t, span.ErrBus)
+	assert.NotNil(t, span.ErrBus)
 	assert.NotNil(t, span.Ctx)
 	assert.NotNil(t, span.Cancel)
 
@@ -48,10 +48,10 @@ func Test_Run(t *testing.T) {
 func Test_RunWithErrorBus(t *testing.T) {
 
 	// create a Message bus for errors
-	bus := lifespan.NewErrorBus(1024)
+	errBus := lifespan.NewErrorBus(10)
 	logHandler := lifespan.NewLogger(0, &lifespan.Options{Level: slog.LevelInfo})
 
-	span := lifespan.Run(logHandler, bus, func(span *lifespan.LifeSpan) {
+	span, _ := lifespan.Run(logHandler, errBus, func(span *lifespan.LifeSpan) {
 		t.Logf("started job: %s", span.UUID)
 	LOOP:
 		for {
@@ -81,7 +81,7 @@ func Test_RunWithErrorBus(t *testing.T) {
 	assert.NotNil(t, span.Cancel)
 
 	// subscribe to errBus
-	e := bus.Subscribe()
+	e := errBus.Subscribe()
 	assert.NotNil(t, e)
 
 	// close the span
@@ -96,10 +96,10 @@ func Test_RunWithErrorBus(t *testing.T) {
 
 func Test_RunWithMoreJobsAndErrors(t *testing.T) {
 	// create a Message bus for errors
-	bus := lifespan.NewErrorBus(1024)
+	errBus := lifespan.NewErrorBus(10)
 	logHandler := lifespan.NewLogger(0, &lifespan.Options{Level: slog.LevelInfo})
 
-	span1 := lifespan.Run(logHandler, bus, func(span *lifespan.LifeSpan) {
+	span1, _ := lifespan.Run(logHandler, errBus, func(span *lifespan.LifeSpan) {
 		t.Logf("started job: %s", span.UUID)
 	LOOP:
 		for {
@@ -118,7 +118,7 @@ func Test_RunWithMoreJobsAndErrors(t *testing.T) {
 		span.Ack <- struct{}{}
 	})
 
-	span2 := lifespan.Run(logHandler, bus, func(span *lifespan.LifeSpan) {
+	span2, _ := lifespan.Run(logHandler, errBus, func(span *lifespan.LifeSpan) {
 		t.Logf("started job: %s", span.UUID)
 	LOOP:
 		for {
@@ -143,10 +143,10 @@ func Test_RunWithMoreJobsAndErrors(t *testing.T) {
 	span2.Close()
 
 	// span1 and span2 are done, so we can close the errBus to prevent deadlock when looping over the values in the channel below.
-	bus.Close()
+	errBus.Close()
 
 	// read remaining data in buffered errBus channel.
-	aggregateErrors := bus.Subscribe()
+	aggregateErrors := errBus.Subscribe()
 	errCount := 0
 	for val := range aggregateErrors {
 		errCount++

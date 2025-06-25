@@ -2,6 +2,7 @@ package lifespan
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"time"
 
@@ -21,7 +22,10 @@ type LifeSpan struct {
 	Sig, Ack chan struct{}
 	// ErrBus is an implementation of MessageBus[any T] which is shared across all Runnable implementations.
 	ErrBus MessageBus[Error]
+	// Logger is a unique log/slog.Logger for a lifespan. Lifespan's share a base log handler so that they may write to the same
+	// underlying LogBus.
 	Logger *slog.Logger
+	// Context information for timeouts and cancels
 	Ctx    context.Context
 	Cancel context.CancelFunc
 }
@@ -42,15 +46,25 @@ func (span *LifeSpan) Close() {
 }
 
 // Run runs the passed in job and returns a pointer to a LifeSpan.
-func Run(logHandler slog.Handler, errBus MessageBus[Error], job func(span *LifeSpan)) (span *LifeSpan) {
-	ctx, cancel := context.WithCancel(context.Background())
+func Run(logHandler slog.Handler, errBus MessageBus[Error], job func(span *LifeSpan)) (*LifeSpan, error) {
+
+	// logHandler and errBus cannot be nil.
+	if logHandler == nil {
+		return nil, errors.New("nil logHandler")
+	}
+
+	if errBus == nil {
+		return nil, errors.New("nil errBus")
+	}
+
 	id := uuid.New()
 
 	// include job_id in logger created from logHandler
 	l := slog.New(logHandler)
 	l = l.With(slog.String("job_id", id.String()))
 
-	span = &LifeSpan{
+	ctx, cancel := context.WithCancel(context.Background())
+	span := &LifeSpan{
 		UUID:   id.String(),
 		Sig:    make(chan struct{}, 1),
 		Ack:    make(chan struct{}, 1),
@@ -66,5 +80,5 @@ func Run(logHandler slog.Handler, errBus MessageBus[Error], job func(span *LifeS
 		job(span)
 	}()
 
-	return
+	return span, nil
 }
