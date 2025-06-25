@@ -37,7 +37,11 @@ type ErrorBus struct {
 }
 
 // NewErrorBus returns a pointer to ErrorBus with the given buffer size.
+// If bsize is less than defaultBufferSize, set bsize to defaultBufferSize.
 func NewErrorBus(bsize int64) *ErrorBus {
+	if bsize < defaultBufferSize {
+		bsize = defaultBufferSize
+	}
 	return &ErrorBus{
 		bus: make(chan Error, bsize),
 	}
@@ -48,6 +52,7 @@ func (e *ErrorBus) Publish(msg Error) {
 	select {
 	case e.bus <- msg:
 	default:
+		// todo: record dropped messages
 	}
 }
 
@@ -67,7 +72,11 @@ type LogBus struct {
 }
 
 // NewLogBus returns a pointer to *LogBus with the given buffer size.
+// If bsize is less than defaultBufferSize, set bsize to defaultBufferSize.
 func NewLogBus(bsize int64) *LogBus {
+	if bsize < defaultBufferSize {
+		bsize = defaultBufferSize
+	}
 	return &LogBus{
 		bus: make(chan Log, bsize),
 	}
@@ -78,6 +87,7 @@ func (l *LogBus) Publish(msg Log) {
 	select {
 	case l.bus <- msg:
 	default:
+		// todo: record dropped messages
 	}
 }
 
