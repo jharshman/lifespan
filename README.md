@@ -18,7 +18,7 @@ until it is signaled to close.
 
 ```golang
 func main() {
-	span, _ := lifespan.Run(logHandler, errBus, func(span *lifespan.LifeSpan) {
+	span, _ := lifespan.Run("", logHandler, errBus, func(span *lifespan.LifeSpan) {
 	LOOP:
 		for {
 			select {
@@ -47,7 +47,7 @@ is similar to the previous example except here we are demonstrating that each Li
 ```golang
 type Job struct{}
 
-func (j *Job) Run(logHandler, errBus, span *lifespan.LifeSpan) {
+func (j *Job) Run("", logHandler, errBus, span *lifespan.LifeSpan) {
 LOOP:
 	for {
 		select {

@@ -16,7 +16,7 @@ func Test_Run(t *testing.T) {
 	logHandler := lifespan.NewLogger(0, &lifespan.Options{Level: slog.LevelInfo})
 	errBus := lifespan.NewErrorBus(10)
 
-	span, _ := lifespan.Run(logHandler, errBus, func(span *lifespan.LifeSpan) {
+	span, _ := lifespan.Run("", logHandler, errBus, func(span *lifespan.LifeSpan) {
 		span.Logger.Info("testing")
 	LOOP:
 		for {
@@ -51,7 +51,7 @@ func Test_RunWithErrorBus(t *testing.T) {
 	errBus := lifespan.NewErrorBus(10)
 	logHandler := lifespan.NewLogger(0, &lifespan.Options{Level: slog.LevelInfo})
 
-	span, _ := lifespan.Run(logHandler, errBus, func(span *lifespan.LifeSpan) {
+	span, _ := lifespan.Run("", logHandler, errBus, func(span *lifespan.LifeSpan) {
 		t.Logf("started job: %s", span.UUID)
 	LOOP:
 		for {
@@ -99,7 +99,7 @@ func Test_RunWithMoreJobsAndErrors(t *testing.T) {
 	errBus := lifespan.NewErrorBus(10)
 	logHandler := lifespan.NewLogger(0, &lifespan.Options{Level: slog.LevelInfo})
 
-	span1, _ := lifespan.Run(logHandler, errBus, func(span *lifespan.LifeSpan) {
+	span1, _ := lifespan.Run("", logHandler, errBus, func(span *lifespan.LifeSpan) {
 		t.Logf("started job: %s", span.UUID)
 	LOOP:
 		for {
@@ -107,10 +107,11 @@ func Test_RunWithMoreJobsAndErrors(t *testing.T) {
 			case <-span.Ctx.Done():
 				break LOOP
 			case <-span.Sig:
-				span.ErrBus.Publish(lifespan.Error{
-					JobID: span.UUID,
-					Error: errors.New("testing 123"),
-				})
+				span.Error(errors.New("testing 123"))
+				//span.ErrBus.Publish(lifespan.Error{
+				//	JobID: span.UUID,
+				//	Error: errors.New("testing 123"),
+				//})
 				break LOOP
 			default:
 			}
@@ -118,7 +119,7 @@ func Test_RunWithMoreJobsAndErrors(t *testing.T) {
 		span.Ack <- struct{}{}
 	})
 
-	span2, _ := lifespan.Run(logHandler, errBus, func(span *lifespan.LifeSpan) {
+	span2, _ := lifespan.Run("", logHandler, errBus, func(span *lifespan.LifeSpan) {
 		t.Logf("started job: %s", span.UUID)
 	LOOP:
 		for {
@@ -126,10 +127,11 @@ func Test_RunWithMoreJobsAndErrors(t *testing.T) {
 			case <-span.Ctx.Done():
 				break LOOP
 			case <-span.Sig:
-				span.ErrBus.Publish(lifespan.Error{
-					JobID: span.UUID,
-					Error: errors.New("testing 456"),
-				})
+				span.Error(errors.New("testing 456"))
+				//span.ErrBus.Publish(lifespan.Error{
+				//	JobID: span.UUID,
+				//	Error: errors.New("testing 456"),
+				//})
 				break LOOP
 			default:
 			}
@@ -152,6 +154,7 @@ func Test_RunWithMoreJobsAndErrors(t *testing.T) {
 		errCount++
 		assert.NotNil(t, val)
 		assert.Error(t, val.Error)
+		t.Logf("aggregated error: %s from job: %s", val.Error, val.JobID)
 	}
 	assert.Equal(t, 2, errCount)
 }

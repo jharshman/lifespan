@@ -37,12 +37,12 @@ func NewLogger(bsize int64, opts *Options) *Logger {
 }
 
 // Enabled returns true if the requested level is greater than or equal to the minimum configured level for the Logger.
-func (l *Logger) Enabled(ctx context.Context, level slog.Level) bool {
+func (l *Logger) Enabled(_ context.Context, level slog.Level) bool {
 	return level >= l.opts.Level.Level()
 }
 
 // Handle takes log records and sends them to the underlying LogBus.
-func (l *Logger) Handle(ctx context.Context, r slog.Record) error {
+func (l *Logger) Handle(_ context.Context, r slog.Record) error {
 
 	log := Log{
 		Msg:      r.Message,

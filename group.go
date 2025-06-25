@@ -40,7 +40,7 @@ func (group *Group) Start(logHandler *Logger, errBus *ErrorBus) error {
 		return errors.New("nil errBus")
 	}
 	for _, job := range group.Jobs {
-		span, _ := Run(logHandler, errBus, func(span *LifeSpan) {
+		span, _ := Run(group.UUID, logHandler, errBus, func(span *LifeSpan) {
 			job.Run(span)
 		})
 		group.Spans = append(group.Spans, span)

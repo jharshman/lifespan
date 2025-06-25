@@ -46,7 +46,7 @@ func (span *LifeSpan) Close() {
 }
 
 // Run runs the passed in job and returns a pointer to a LifeSpan.
-func Run(logHandler slog.Handler, errBus MessageBus[Error], job func(span *LifeSpan)) (*LifeSpan, error) {
+func Run(groupID string, logHandler slog.Handler, errBus MessageBus[Error], job func(span *LifeSpan)) (*LifeSpan, error) {
 
 	// logHandler and errBus cannot be nil.
 	if logHandler == nil {
@@ -61,7 +61,7 @@ func Run(logHandler slog.Handler, errBus MessageBus[Error], job func(span *LifeS
 
 	// include job_id in logger created from logHandler
 	l := slog.New(logHandler)
-	l = l.With(slog.String("job_id", id.String()))
+	l = l.With(slog.String("job_id", id.String()), slog.String("group_id", groupID))
 
 	ctx, cancel := context.WithCancel(context.Background())
 	span := &LifeSpan{
@@ -81,4 +81,14 @@ func Run(logHandler slog.Handler, errBus MessageBus[Error], job func(span *LifeS
 	}()
 
 	return span, nil
+}
+
+func (span *LifeSpan) Error(err error) {
+	e := Error{
+		JobID:     span.UUID,
+		GroupID:   "",
+		Error:     err,
+		Timestamp: time.Now().UTC(),
+	}
+	span.ErrBus.Publish(e)
 }
