@@ -172,10 +172,15 @@ Errors are also written to a MessageBus and subscribing to the ErrorBus works th
 	// Run will put the job_id into the logger so every log can be attributed to the job that emitted it.
 	span, _ := lifespan.Run(logHandler, errBus, func(span *lifespan.LifeSpan) {
 
+		// publish an error directly on the ErrBus
         span.ErrBus.Publish(lifespan.Error{
             JobID: "123-456-789",
             Error: errors.New("testing 123"),
         })
+		
+		// or publish an error using the utility method on LifeSpan
+		// this will automatically insert the Job UUID and the timestamp of the error
+		span.Error(errors.New("testing 456"))
 		
 	})
 }
