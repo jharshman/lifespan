@@ -66,7 +66,7 @@ LOOP:
 }
 ```
 
-Here we demonstrate different ways to use the custom Job we defined.
+Below we take the above implementation and demonstrate different ways to use it.
 
 1. Running a job and responding to an os.Signal like SIGTERM or SIGINT.
 2. Running a job and responding to a context timeout.
@@ -77,11 +77,15 @@ Here we demonstrate different ways to use the custom Job we defined.
 ```golang
 func main() {
 
+	// create a Logger and ErrorBus for the log and error aggregation.
+    logHandler := lifespan.NewLogger(1024, &lifespan.Options{Level: slog.LevelInfo})
+    errBus := lifespan.NewErrorBus(1024)
+
     j1 := &Job{}
     
     // 1. Running a job and responding to an os.Signal like SIGTERM or SIGINT
     
-    span, _ := lifespan.Run(j1.Run)
+    span, _ := lifespan.Run("", logHandler, errBus, j1.Run)
     notify := make(chan os.Signal, 1)
     signal.Notify(notify, syscall.SIGTERM, syscall.SIGINT)
     <-notify
@@ -89,7 +93,7 @@ func main() {
     
     // 2. Running a job and responding to a context timeout
     
-    span, _ = lifespan.Run(j1.Run)
+    span, _ = lifespan.Run("", logHandler, errBus, j1.Run)
     // lifespans have contexts and cancel functions. Here we overwrite them with a timeout.
     // We wait for the timeout which will send an Ack once the goroutine has finished.
     span.Ctx, span.Cancel = context.WithTimeout(span.Ctx, 5*time.Second)
@@ -101,9 +105,6 @@ func main() {
     j3 := &Job{}
     j4 := &Job{}
     j5 := &Job{}
-    
-    logHandler := lifespan.NewLogger(1024, &lifespan.Options{Level: slog.LevelInfo})
-    errBus := lifespan.NewErrorBus(1024)
     
     group := lifespan.NewGroup(j1, j2, j3, j4, j5)
     group.Start(logHandler, errBus)
@@ -128,7 +129,7 @@ func main() {
 
 Lifespan provides methods of Log and Error aggregation via an internal Message Bus.
 
-#### Logging
+### Logging
 
 Lifespan provides a MessageBus implementation for Logging that is also usable through a log/slog.Handler.
 By creating using the provided log handler, each job that gets run has the ability to write structured logs into 
@@ -158,7 +159,7 @@ Reading logs is as simple as subscribing to the Message Bus.
 logHandler.Bus().Subscribe()
 ```
 
-#### Errors
+### Errors
 
 Errors are also written to a MessageBus and subscribing to the ErrorBus works the same as as it does for logging.
 

@@ -52,7 +52,7 @@ func (e *ErrorBus) Publish(msg Error) {
 	select {
 	case e.bus <- msg:
 	default:
-		// todo: record dropped messages
+		// todo: record dropped messages metric
 	}
 }
 
@@ -87,7 +87,7 @@ func (l *LogBus) Publish(msg Log) {
 	select {
 	case l.bus <- msg:
 	default:
-		// todo: record dropped messages
+		// todo: record dropped messages metric
 	}
 }
 
