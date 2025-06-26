@@ -13,21 +13,17 @@ type Group struct {
 	UUID string
 	// Jobs an array of Runnable
 	Jobs []Runnable
-	// Array of *LifeSpan
-	Spans  []*LifeSpan
-	Ctx    context.Context
-	Cancel context.CancelFunc
+	// Spans is a map of LifeSpans keyed by the LifeSpan's UUID.
+	Spans map[string]*LifeSpan
 }
 
 // NewGroup returns a pointer to a *Group holding the Runnable jobs.
 func NewGroup(jobs ...Runnable) *Group {
-	ctx, cancel := context.WithCancel(context.Background())
 	id := uuid.New()
 	return &Group{
-		UUID:   id.String(),
-		Jobs:   jobs,
-		Ctx:    ctx,
-		Cancel: cancel,
+		UUID:  id.String(),
+		Jobs:  jobs,
+		Spans: make(map[string]*LifeSpan, len(jobs)),
 	}
 }
 
@@ -39,11 +35,19 @@ func (group *Group) Start(logHandler *Logger, errBus *ErrorBus) error {
 	if errBus == nil {
 		return errors.New("nil errBus")
 	}
+
+	// base context contains group_id
+	baseCtx := context.Background()
+	baseCtx = context.WithValue(baseCtx, groupIDKey, group.UUID)
+
 	for _, job := range group.Jobs {
-		span, _ := Run(group.UUID, logHandler, errBus, func(span *LifeSpan) {
-			job.Run(span)
+		// build context per job containing job_id
+		id := uuid.New().String()
+		ctx := context.WithValue(baseCtx, jobIDKey, id)
+		span, _ := Run(ctx, logHandler, errBus, func(ctx context.Context, span *LifeSpan) {
+			job.Run(ctx, span)
 		})
-		group.Spans = append(group.Spans, span)
+		group.Spans[id] = span
 	}
 	return nil
 }
@@ -58,10 +62,5 @@ func (group *Group) Close() {
 // GetLifeSpanByID returns a pointer to the LifeSpan associated with the given uuid.
 // returns nil if non exists.
 func (group *Group) GetLifeSpanByID(uuid string) *LifeSpan {
-	for _, span := range group.Spans {
-		if span.UUID == uuid {
-			return span
-		}
-	}
-	return nil
+	return group.Spans[uuid]
 }

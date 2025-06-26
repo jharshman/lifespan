@@ -1,6 +1,7 @@
 package lifespan_test
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -16,12 +17,12 @@ func Test_Run(t *testing.T) {
 	logHandler := lifespan.NewLogger(0, &lifespan.Options{Level: slog.LevelInfo})
 	errBus := lifespan.NewErrorBus(10)
 
-	span, _ := lifespan.Run("", logHandler, errBus, func(span *lifespan.LifeSpan) {
+	span, _ := lifespan.Run(context.Background(), logHandler, errBus, func(ctx context.Context, span *lifespan.LifeSpan) {
 		span.Logger.Info("testing")
 	LOOP:
 		for {
 			select {
-			case <-span.Ctx.Done():
+			case <-ctx.Done():
 				break LOOP
 			case <-span.Sig:
 				break LOOP
@@ -33,12 +34,9 @@ func Test_Run(t *testing.T) {
 
 	// assert that span contains...
 	require.NotNil(t, span)
-	assert.NotEmpty(t, span.UUID)
 	assert.NotNil(t, span.Sig)
 	assert.NotNil(t, span.Ack)
 	assert.NotNil(t, span.ErrBus)
-	assert.NotNil(t, span.Ctx)
-	assert.NotNil(t, span.Cancel)
 
 	// close the span
 	span.Close()
@@ -51,12 +49,12 @@ func Test_RunWithErrorBus(t *testing.T) {
 	errBus := lifespan.NewErrorBus(10)
 	logHandler := lifespan.NewLogger(0, &lifespan.Options{Level: slog.LevelInfo})
 
-	span, _ := lifespan.Run("", logHandler, errBus, func(span *lifespan.LifeSpan) {
-		t.Logf("started job: %s", span.UUID)
+	span, _ := lifespan.Run(context.Background(), logHandler, errBus, func(ctx context.Context, span *lifespan.LifeSpan) {
+		t.Logf("started job: %s", ctx.Value("job_id").(string))
 	LOOP:
 		for {
 			select {
-			case <-span.Ctx.Done():
+			case <-ctx.Done():
 				break LOOP
 			case <-span.Sig:
 				break LOOP
@@ -73,12 +71,9 @@ func Test_RunWithErrorBus(t *testing.T) {
 
 	// assert that span contains...
 	require.NotNil(t, span)
-	assert.NotEmpty(t, span.UUID)
 	assert.NotNil(t, span.Sig)
 	assert.NotNil(t, span.Ack)
 	assert.NotNil(t, span.ErrBus)
-	assert.NotNil(t, span.Ctx)
-	assert.NotNil(t, span.Cancel)
 
 	// subscribe to errBus
 	e := errBus.Subscribe()
@@ -99,15 +94,15 @@ func Test_RunWithMoreJobsAndErrors(t *testing.T) {
 	errBus := lifespan.NewErrorBus(10)
 	logHandler := lifespan.NewLogger(0, &lifespan.Options{Level: slog.LevelInfo})
 
-	span1, _ := lifespan.Run("", logHandler, errBus, func(span *lifespan.LifeSpan) {
-		t.Logf("started job: %s", span.UUID)
+	span1, _ := lifespan.Run(context.Background(), logHandler, errBus, func(ctx context.Context, span *lifespan.LifeSpan) {
+		t.Logf("started job: %s", ctx.Value("job_id").(string))
 	LOOP:
 		for {
 			select {
-			case <-span.Ctx.Done():
+			case <-ctx.Done():
 				break LOOP
 			case <-span.Sig:
-				span.Error(errors.New("testing 123"))
+				span.Error(ctx, errors.New("testing 123"))
 				//span.ErrBus.Publish(lifespan.Error{
 				//	JobID: span.UUID,
 				//	Error: errors.New("testing 123"),
@@ -119,15 +114,15 @@ func Test_RunWithMoreJobsAndErrors(t *testing.T) {
 		span.Ack <- struct{}{}
 	})
 
-	span2, _ := lifespan.Run("", logHandler, errBus, func(span *lifespan.LifeSpan) {
-		t.Logf("started job: %s", span.UUID)
+	span2, _ := lifespan.Run(context.Background(), logHandler, errBus, func(ctx context.Context, span *lifespan.LifeSpan) {
+		t.Logf("started job: %s", ctx.Value("job_id").(string))
 	LOOP:
 		for {
 			select {
-			case <-span.Ctx.Done():
+			case <-ctx.Done():
 				break LOOP
 			case <-span.Sig:
-				span.Error(errors.New("testing 456"))
+				span.Error(ctx, errors.New("testing 456"))
 				//span.ErrBus.Publish(lifespan.Error{
 				//	JobID: span.UUID,
 				//	Error: errors.New("testing 456"),

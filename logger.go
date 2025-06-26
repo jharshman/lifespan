@@ -48,17 +48,24 @@ func (l *Logger) Enabled(_ context.Context, level slog.Level) bool {
 }
 
 // Handle takes log records and sends them to the underlying LogBus.
-func (l *Logger) Handle(_ context.Context, r slog.Record) error {
+func (l *Logger) Handle(ctx context.Context, r slog.Record) error {
 
 	log := Log{
 		Msg:      r.Message,
 		Level:    r.Level.String(),
-		Metadata: make(map[string]any, r.NumAttrs()),
+		Metadata: make(map[string]any, r.NumAttrs()+len(l.attrs)),
 	}
 
 	// set timestamp in UTC
 	if !r.Time.IsZero() {
 		log.Timestamp = r.Time.UTC()
+	}
+
+	if jid, ok := ctx.Value(jobIDKey).(string); ok {
+		log.JobID = jid
+	}
+	if gid, ok := ctx.Value(groupIDKey).(string); ok {
+		log.GroupID = gid
 	}
 
 	// Process the logger's stored attributes first (from WithAttrs calls)
@@ -74,19 +81,10 @@ func (l *Logger) Handle(_ context.Context, r slog.Record) error {
 		}
 	}
 
-	// Then extract attributes from slog.Record
-	// job_id and group_id have the potential to be in either Logger attributes or Record attributes
-	// if they are in the Record attributes, Record attributes take priority.
+	// attributes can are also stored in the Record, grab those and add to the Metadata
 	r.Attrs(func(attr slog.Attr) bool {
 		v := attr.Value.Resolve()
-		switch attr.Key {
-		case jobIDKey:
-			log.JobID = v.String()
-		case groupIDKey:
-			log.GroupID = v.String()
-		default:
-			log.Metadata[attr.Key] = v.Any()
-		}
+		log.Metadata[attr.Key] = v.Any()
 		return true
 	})
 

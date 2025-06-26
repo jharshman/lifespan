@@ -18,11 +18,11 @@ until it is signaled to close.
 
 ```golang
 func main() {
-	span, _ := lifespan.Run("", logHandler, errBus, func(span *lifespan.LifeSpan) {
+	span, _ := lifespan.Run(ctx, logHandler, errBus, func(ctx context.Context, span *lifespan.LifeSpan) {
 	LOOP:
 		for {
 			select {
-			case <-span.Ctx.Done():
+			case <-ctx.Done():
 				break LOOP
 			case <-span.Sig:
 				break LOOP
@@ -47,20 +47,20 @@ is similar to the previous example except here we are demonstrating that each Li
 ```golang
 type Job struct{}
 
-func (j *Job) Run("", logHandler, errBus, span *lifespan.LifeSpan) {
+func (j *Job) Run(ctx, logHandler, errBus, span *lifespan.LifeSpan) {
 LOOP:
 	for {
 		select {
-		case <-span.Ctx.Done():
+		case <-ctx.Done():
 			break LOOP
 		case <-span.Sig:
 			break LOOP
 		default:
 		}
-		fmt.Printf("hello from Job: %s\n", span.UUID.String())
+		fmt.Printf("hello from Job: %s\n", ctx.Value("job_id").(string))
 		time.Sleep(1 * time.Second)
 	}
-	fmt.Printf("done with Job: %s\n", span.UUID.String())
+	fmt.Printf("done with Job: %s\n", ctx.Value("job_id").(string))
 	span.Ack <- struct{}{}
 }
 ```
@@ -79,23 +79,22 @@ func main() {
 	// create a Logger and ErrorBus for the log and error aggregation.
     logHandler := lifespan.NewLogger(1024, &lifespan.Options{Level: slog.LevelInfo})
     errBus := lifespan.NewErrorBus(1024)
+	
 
     j1 := &Job{}
-    
+	
     // 1. Running a job and responding to an os.Signal like SIGTERM or SIGINT
     
-    span, _ := lifespan.Run("", logHandler, errBus, j1.Run)
+    span, _ := lifespan.Run(context.Background(), logHandler, errBus, j1.Run)
     notify := make(chan os.Signal, 1)
     signal.Notify(notify, syscall.SIGTERM, syscall.SIGINT)
     <-notify
     span.Close()
     
     // 2. Running a job and responding to a context timeout
-    
-    span, _ = lifespan.Run("", logHandler, errBus, j1.Run)
-    // lifespans have contexts and cancel functions. Here we overwrite them with a timeout.
-    // We wait for the timeout which will send an Ack once the goroutine has finished.
-    span.Ctx, span.Cancel = context.WithTimeout(span.Ctx, 5*time.Second)
+
+	ctx, cancel := context.WithTimeout(span.Ctx, 5*time.Second)
+    span, _ = lifespan.Run(ctx, logHandler, errBus, j1.Run)
     <-span.Ack
     
     // 3. Creating a group of jobs
@@ -142,7 +141,7 @@ func main() {
 	
     // Pass the logHandler into the Run function
     // Run will put the job_id into the logger so every log can be attributed to the job that emitted it.
-    span, _ := lifespan.Run(logHandler, errBus, func(span *lifespan.LifeSpan) {
+    span, _ := lifespan.Run(ctx, logHandler, errBus, func(ctx context.Context, span *lifespan.LifeSpan) {
         // example of log usage
         span.Logger.Info("log at info level")
         span.Logger.Warn("log at warn level")
@@ -169,7 +168,7 @@ Errors are also written to a MessageBus and subscribing to the ErrorBus works th
 	
     // Pass the logHandler into the Run function
     // Run will put the job_id into the logger so every log can be attributed to the job that emitted it.
-    span, _ := lifespan.Run(logHandler, errBus, func(span *lifespan.LifeSpan) {
+    span, _ := lifespan.Run(ctx, logHandler, errBus, func(ctx context.Context, span *lifespan.LifeSpan) {
 
         // publish an error directly on the ErrBus
         span.ErrBus.Publish(lifespan.Error{
