@@ -33,7 +33,8 @@ type LifeSpan struct {
 }
 
 // Close will signal a runnable task to shutdown. If an acknowledgement is not given
-// by the runnable task after 3 seconds, Close will move on.
+// by the runnable task after 3 seconds, Close will log a warning but otherwise
+// leave the task to handle cancellation according to its own implementation.
 func (span *LifeSpan) Close() {
 	select {
 	case span.Sig <- struct{}{}:
@@ -41,9 +42,10 @@ func (span *LifeSpan) Close() {
 		case <-span.Ack:
 			return
 		case <-time.After(3 * time.Second):
-			slog.Warn("timeout waiting for ack")
+			span.Logger.Warn("timeout waiting for acknowledgement")
 		}
 	default:
+		span.Logger.Warn("unable to send signal")
 	}
 }
 
