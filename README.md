@@ -5,8 +5,7 @@
 
 ## TL;DR
 
-Package lifespan provides an opinionated (yet hopefully flexible enough) method for defining and running synchronous or asynchronous tasks.
-The goal is to encourage good patterns when using goroutines.
+Package lifespan provides an opinionated method for managing the lifecycle, observability, and coordination of concurrent tasks.
 
 > "Never start a goroutine without knowing how it will stop"
     - Dave Cheney
