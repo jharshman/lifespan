@@ -48,10 +48,20 @@ func (group *Group) Start(logHandler *Logger, errBus *ErrorBus) error {
 	return nil
 }
 
-// Close will cancel the Group and range over available spans calling each span's Close Method.
+// Close will range over available spans calling each span's Close Method.
 func (group *Group) Close() {
-	group.Cancel()
 	for _, span := range group.Spans {
 		span.Close()
 	}
+}
+
+// GetLifeSpanByID returns a pointer to the LifeSpan associated with the given uuid.
+// returns nil if non exists.
+func (group *Group) GetLifeSpanByID(uuid string) *LifeSpan {
+	for _, span := range group.Spans {
+		if span.UUID == uuid {
+			return span
+		}
+	}
+	return nil
 }
