@@ -5,8 +5,14 @@ import (
 	"log/slog"
 )
 
-// defaultBufferSize provides a sane default for the underlying LogBus.
-const defaultBufferSize = 1024
+const (
+	// defaultBufferSize provides a sane default for the underlying LogBus.
+	defaultBufferSize = 1024
+
+	// job_id and group_id attribute keys
+	jobIDKey   = "job_id"
+	groupIDKey = "group_id"
+)
 
 // Logger implements of log/slog Handler.
 // It primarily sits on top of a LogBus and provides a standard log interface for it.
@@ -59,9 +65,9 @@ func (l *Logger) Handle(_ context.Context, r slog.Record) error {
 	for _, attr := range l.attrs {
 		v := attr.Value.Resolve()
 		switch attr.Key {
-		case "job_id":
+		case jobIDKey:
 			log.JobID = v.String()
-		case "group_id":
+		case groupIDKey:
 			log.GroupID = v.String()
 		default:
 			log.Metadata[attr.Key] = v.Any()
@@ -69,12 +75,14 @@ func (l *Logger) Handle(_ context.Context, r slog.Record) error {
 	}
 
 	// Then extract attributes from slog.Record
+	// job_id and group_id have the potential to be in either Logger attributes or Record attributes
+	// if they are in the Record attributes, Record attributes take priority.
 	r.Attrs(func(attr slog.Attr) bool {
 		v := attr.Value.Resolve()
 		switch attr.Key {
-		case "job_id":
+		case jobIDKey:
 			log.JobID = v.String()
-		case "group_id":
+		case groupIDKey:
 			log.GroupID = v.String()
 		default:
 			log.Metadata[attr.Key] = v.Any()
