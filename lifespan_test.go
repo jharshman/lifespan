@@ -4,8 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
 	"testing"
+	"time"
 
 	"github.com/jharshman/lifespan"
 	"github.com/stretchr/testify/assert"
@@ -14,10 +14,7 @@ import (
 
 func Test_Run(t *testing.T) {
 
-	logHandler := lifespan.NewLogger(0, &lifespan.Options{Level: slog.LevelInfo})
-	errBus := lifespan.NewErrorBus(10)
-
-	span, _ := lifespan.Run(context.Background(), logHandler, errBus, func(ctx context.Context, span *lifespan.LifeSpan) {
+	span, _ := lifespan.Run(context.Background(), func(ctx context.Context, span *lifespan.LifeSpan) {
 		span.Logger.Info("testing")
 	LOOP:
 		for {
@@ -40,116 +37,59 @@ func Test_Run(t *testing.T) {
 
 	// close the span
 	span.Close()
-	fmt.Println(<-logHandler.Bus().Subscribe())
+
 }
 
 func Test_RunWithErrorBus(t *testing.T) {
 
-	// create a Message bus for errors
-	errBus := lifespan.NewErrorBus(10)
-	logHandler := lifespan.NewLogger(0, &lifespan.Options{Level: slog.LevelInfo})
-
-	span, _ := lifespan.Run(context.Background(), logHandler, errBus, func(ctx context.Context, span *lifespan.LifeSpan) {
-		t.Logf("started job: %s", ctx.Value("job_id").(string))
+	jobfunc := func(ctx context.Context, span *lifespan.LifeSpan) {
+		span.Logger.Info("starting job")
 	LOOP:
 		for {
 			select {
 			case <-ctx.Done():
 				break LOOP
 			case <-span.Sig:
-				break LOOP
-			default:
-			}
-		}
-		// test publish error
-		span.ErrBus.Publish(lifespan.Error{
-			JobID: "123-456-789",
-			Error: errors.New("testing 123"),
-		})
-		span.Ack <- struct{}{}
-	})
-
-	// assert that span contains...
-	require.NotNil(t, span)
-	assert.NotNil(t, span.Sig)
-	assert.NotNil(t, span.Ack)
-	assert.NotNil(t, span.ErrBus)
-
-	// subscribe to errBus
-	e := errBus.Subscribe()
-	assert.NotNil(t, e)
-
-	// close the span
-	// this also tests the errBus
-	span.Close()
-
-	// read error from errBus
-	errVal := <-e
-	assert.NotNil(t, errVal)
-	assert.Equal(t, "123-456-789", errVal.JobID)
-}
-
-func Test_RunWithMoreJobsAndErrors(t *testing.T) {
-	// create a Message bus for errors
-	errBus := lifespan.NewErrorBus(10)
-	logHandler := lifespan.NewLogger(0, &lifespan.Options{Level: slog.LevelInfo})
-
-	span1, _ := lifespan.Run(context.Background(), logHandler, errBus, func(ctx context.Context, span *lifespan.LifeSpan) {
-		t.Logf("started job: %s", ctx.Value("job_id").(string))
-	LOOP:
-		for {
-			select {
-			case <-ctx.Done():
-				break LOOP
-			case <-span.Sig:
-				span.Error(ctx, errors.New("testing 123"))
-				//span.ErrBus.Publish(lifespan.Error{
-				//	JobID: span.UUID,
-				//	Error: errors.New("testing 123"),
-				//})
-				break LOOP
-			default:
+				span.Error(ctx, errors.New("test error"))
 			}
 		}
 		span.Ack <- struct{}{}
-	})
-
-	span2, _ := lifespan.Run(context.Background(), logHandler, errBus, func(ctx context.Context, span *lifespan.LifeSpan) {
-		t.Logf("started job: %s", ctx.Value("job_id").(string))
-	LOOP:
-		for {
-			select {
-			case <-ctx.Done():
-				break LOOP
-			case <-span.Sig:
-				span.Error(ctx, errors.New("testing 456"))
-				//span.ErrBus.Publish(lifespan.Error{
-				//	JobID: span.UUID,
-				//	Error: errors.New("testing 456"),
-				//})
-				break LOOP
-			default:
-			}
-		}
-		span.Ack <- struct{}{}
-	})
-
-	// clean up jobs
-	// This will also trigger a write to the errBus for span1 and span2.
-	span1.Close()
-	span2.Close()
-
-	// span1 and span2 are done, so we can close the errBus to prevent deadlock when looping over the values in the channel below.
-	errBus.Close()
-
-	// read remaining data in buffered errBus channel.
-	aggregateErrors := errBus.Subscribe()
-	errCount := 0
-	for val := range aggregateErrors {
-		errCount++
-		assert.NotNil(t, val)
-		assert.Error(t, val.Error)
-		t.Logf("aggregated error: %s from job: %s", val.Error, val.JobID)
 	}
-	assert.Equal(t, 2, errCount)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	span1, _ := lifespan.Run(ctx, jobfunc)
+	span2, _ := lifespan.Run(ctx, jobfunc)
+
+	errorCount := 0
+	span3, _ := lifespan.Run(ctx, func(ctx context.Context, span *lifespan.LifeSpan) {
+		sub := lifespan.DefaultCentralErrorBus.Subscribe()
+	LOOP:
+		for {
+			select {
+			case <-span.Sig:
+				break LOOP
+			case msg := <-sub:
+				fmt.Println(msg)
+				errorCount++
+			}
+		}
+	})
+
+	// trigger write for span1 and span2 to error bus
+	for i := 0; i < 5; i++ {
+		span1.Sig <- struct{}{}
+		span2.Sig <- struct{}{}
+	}
+
+	<-time.After(time.Second * 5)
+	// kill span1 and span2 with cancel function
+	cancel()
+	// kill span3
+	span3.Close()
+
+	// close central error bus
+	lifespan.DefaultCentralErrorBus.Close()
+
+	assert.Equal(t, 10, errorCount)
+
 }

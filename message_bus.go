@@ -1,6 +1,9 @@
 package lifespan
 
-import "time"
+import (
+	"sync"
+	"time"
+)
 
 // Error is a message that can be sent via a lifespan MessageBus.
 // This type contains a standard error with additional metadata like the lifespan's UUID.
@@ -11,92 +14,85 @@ type Error struct {
 	Timestamp time.Time
 }
 
-// Log is a message that can be sent via a lifespan MessageBus.
-// This type contains a standard error with additional metadata like the lifespan's UUID.
-type Log struct {
-	JobID     string
-	GroupID   string
-	Msg       string
-	Level     string
-	Metadata  map[string]any
-	Timestamp time.Time
-}
-
 // MessageBus defines behavior for a generic message bus.
 // The implementations within the lifespan package provide
 // a MessageBus for Errors and a MessageBus for Logs.
 type MessageBus[T any] interface {
+	Register(ch <-chan T)
 	Publish(msg T)
 	Subscribe() <-chan T
 	Close()
 }
 
-// ErrorBus implements the MessageBus interface for the Error type.
-type ErrorBus struct {
-	bus chan Error
+// CentralMessageBus ...
+type CentralMessageBus[T any] struct {
+	mu     sync.Mutex
+	wg     sync.WaitGroup
+	closed bool
+	bus    chan T
 }
 
-// NewErrorBus returns a pointer to ErrorBus with the given buffer size.
-// If bsize is less than defaultBufferSize, set bsize to defaultBufferSize.
-func NewErrorBus(bsize int64) *ErrorBus {
-	if bsize < defaultBufferSize {
-		bsize = defaultBufferSize
+var DefaultCentralErrorBus = NewCentralMessageBus[Error](defaultBufferSize)
+
+func NewCentralMessageBus[T any](bufferSize int64) *CentralMessageBus[T] {
+	return &CentralMessageBus[T]{
+		bus: make(chan T, bufferSize),
 	}
-	return &ErrorBus{
-		bus: make(chan Error, bsize),
+}
+
+func (cb *CentralMessageBus[T]) Register(ch <-chan T) {
+	cb.mu.Lock()
+	defer cb.mu.Unlock()
+
+	// check if the message bus is closed
+	// don't accept new registration if the bus is closed.
+	if cb.closed {
+		panic("CentralMessageBus[T] is already closed")
 	}
+
+	// for the ch parameter, which is a receive only channel of type T,
+	// spawn a goroutine to write into the central message bus
+	cb.wg.Add(1)
+	go func() {
+		defer cb.wg.Done()
+		// the loop ends when ch is closed.
+		for msg := range ch {
+			cb.bus <- msg
+		}
+	}()
 }
 
 // Publish writes the Error to the bus.
-func (e *ErrorBus) Publish(msg Error) {
+func (cb *CentralMessageBus[T]) Publish(msg T) {
 	select {
-	case e.bus <- msg:
+	case cb.bus <- msg:
 	default:
 		// todo: record dropped messages metric
 	}
 }
 
 // Subscribe returns a receive channel for the ErrorBus implementation.
-func (e *ErrorBus) Subscribe() <-chan Error {
-	return e.bus
+func (cb *CentralMessageBus[T]) Subscribe() <-chan T {
+	return cb.bus
 }
 
 // Close will close the channel contained within ErrorBus.
-func (e *ErrorBus) Close() {
-	close(e.bus)
-}
+func (cb *CentralMessageBus[T]) Close() {
+	cb.mu.Lock()
 
-// LogBus implements the MessageBus interface for the Log type.
-type LogBus struct {
-	bus chan Log
-}
-
-// NewLogBus returns a pointer to *LogBus with the given buffer size.
-// If bsize is less than defaultBufferSize, set bsize to defaultBufferSize.
-func NewLogBus(bsize int64) *LogBus {
-	if bsize < defaultBufferSize {
-		bsize = defaultBufferSize
+	// check if already closed
+	if cb.closed {
+		cb.mu.Unlock()
+		return
 	}
-	return &LogBus{
-		bus: make(chan Log, bsize),
-	}
-}
 
-// Publish writes the Log to the bus.
-func (l *LogBus) Publish(msg Log) {
-	select {
-	case l.bus <- msg:
-	default:
-		// todo: record dropped messages metric
-	}
-}
+	// set close to true
+	// this stops additional registrations
+	cb.closed = true
+	cb.mu.Unlock()
 
-// Subscribe returns a receive channel for the LogBus implementation.
-func (l *LogBus) Subscribe() <-chan Log {
-	return l.bus
-}
+	// wait for all publishers to close first.
+	cb.wg.Wait()
 
-// Close will close the channel contained within LogBus.
-func (l *LogBus) Close() {
-	close(l.bus)
+	close(cb.bus)
 }

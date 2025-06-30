@@ -2,8 +2,6 @@ package lifespan
 
 import (
 	"context"
-	"errors"
-
 	"github.com/google/uuid"
 )
 
@@ -28,13 +26,7 @@ func NewGroup(jobs ...Runnable) *Group {
 }
 
 // Start executes the group of Jobs, storing each Job's LifeSpan in the Group structure.
-func (group *Group) Start(logHandler *Logger, errBus *ErrorBus) error {
-	if logHandler == nil {
-		return errors.New("nil logHandler")
-	}
-	if errBus == nil {
-		return errors.New("nil errBus")
-	}
+func (group *Group) Start() error {
 
 	// base context contains group_id
 	baseCtx := context.Background()
@@ -44,7 +36,7 @@ func (group *Group) Start(logHandler *Logger, errBus *ErrorBus) error {
 		// build context per job containing job_id
 		id := uuid.New().String()
 		ctx := context.WithValue(baseCtx, jobIDKey, id)
-		span, _ := Run(ctx, logHandler, errBus, func(ctx context.Context, span *LifeSpan) {
+		span, _ := Run(ctx, func(ctx context.Context, span *LifeSpan) {
 			job.Run(ctx, span)
 		})
 		group.Spans[id] = span
