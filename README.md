@@ -18,7 +18,7 @@ until it is signaled to close.
 
 ```golang
 func main() {
-	span, _ := lifespan.Run(ctx, logHandler, errBus, func(ctx context.Context, span *lifespan.LifeSpan) {
+	span, _ := lifespan.Run(ctx, func(ctx context.Context, span *lifespan.LifeSpan) {
 	LOOP:
 		for {
 			select {
@@ -47,7 +47,7 @@ is similar to the previous example except here we are demonstrating that each Li
 ```golang
 type Job struct{}
 
-func (j *Job) Run(ctx, logHandler, errBus, span *lifespan.LifeSpan) {
+func (j *Job) Run(ctx, span *lifespan.LifeSpan) {
 LOOP:
 	for {
 		select {
@@ -75,17 +75,12 @@ Below we take the above implementation and demonstrate different ways to use it.
 
 ```golang
 func main() {
-
-	// create a Logger and ErrorBus for the log and error aggregation.
-    logHandler := lifespan.NewLogger(1024, &lifespan.Options{Level: slog.LevelInfo})
-    errBus := lifespan.NewErrorBus(1024)
 	
-
     j1 := &Job{}
 	
     // 1. Running a job and responding to an os.Signal like SIGTERM or SIGINT
     
-    span, _ := lifespan.Run(context.Background(), logHandler, errBus, j1.Run)
+    span, _ := lifespan.Run(context.Background(), j1.Run)
     notify := make(chan os.Signal, 1)
     signal.Notify(notify, syscall.SIGTERM, syscall.SIGINT)
     <-notify
@@ -94,7 +89,7 @@ func main() {
     // 2. Running a job and responding to a context timeout
 
 	ctx, cancel := context.WithTimeout(span.Ctx, 5*time.Second)
-    span, _ = lifespan.Run(ctx, logHandler, errBus, j1.Run)
+    span, _ = lifespan.Run(ctx, j1.Run)
     <-span.Ack
     
     // 3. Creating a group of jobs
@@ -105,7 +100,7 @@ func main() {
     j5 := &Job{}
     
     group := lifespan.NewGroup(j1, j2, j3, j4, j5)
-    group.Start(logHandler, errBus)
+    group.Start()
     
     time.Sleep(3 * time.Second)
     
@@ -129,67 +124,43 @@ Lifespan provides methods of Log and Error aggregation via an internal Message B
 
 ### Logging
 
-Lifespan provides a MessageBus implementation for Logging that is also usable through a log/slog.Handler.
-By creating using the provided log handler, each job that gets run has the ability to write structured logs into 
-a central Message Bus that can then be consumed.
+Lifespan provides a Logger on each LifeSpan. This default Logger includes the `job_id` and `group_id` (if applicable) and are
+pulled from the context.
 
 ```golang
 func main() {
-    // Creates a logHandler.
-    // The lifespan implementation of log/slog.Handler will write to an underlying implementation of MessageBus for Logs. 
-    logHandler := lifespan.NewLogger(1024, &lifespan.Options{Level: slog.LevelInfo})
-	
     // Pass the logHandler into the Run function
     // Run will put the job_id into the logger so every log can be attributed to the job that emitted it.
-    span, _ := lifespan.Run(ctx, logHandler, errBus, func(ctx context.Context, span *lifespan.LifeSpan) {
+    span, _ := lifespan.Run(ctx, func(ctx context.Context, span *lifespan.LifeSpan) {
         // example of log usage
-        span.Logger.Info("log at info level")
-        span.Logger.Warn("log at warn level")
-        span.Logger.Error("log at error level")
+        span.Logger.Info("log at info level") // 2025/06/29 21:27:42 INFO log at info level job_id=8439b094-8192-4d02-a545-887e1bcd0926 group_id=""
+        span.Logger.Warn("log at warn level") // 2025/06/29 21:27:42 WARN log at warn level job_id=8439b094-8192-4d02-a545-887e1bcd0926 group_id=""
+        span.Logger.Error("log at error level") // 2025/06/29 21:27:42 ERROR log at error level job_id=8439b094-8192-4d02-a545-887e1bcd0926 group_id=""
         })
 }
 ```
 
-Reading logs is as simple as subscribing to the Message Bus.
-
-```golang
-// returns a channel on which log messages can be consumed.
-logHandler.Bus().Subscribe()
-```
 
 ### Errors
 
-Errors are also written to a MessageBus and subscribing to the ErrorBus works the same as as it does for logging.
+Lifespan provides a central message bus for errors. Each LifeSpan is given its own channel to write errors into and this is aggregated into
+a Message Bus that can be subscribed to.
 
 ```golang
     // Creates a logHandler.
     // The lifespan implementation of log/slog.Handler will write to an underlying implementation of MessageBus for Logs.
-    errBus := lifespan.NewErrorBus(1024)
 	
     // Pass the logHandler into the Run function
     // Run will put the job_id into the logger so every log can be attributed to the job that emitted it.
-    span, _ := lifespan.Run(ctx, logHandler, errBus, func(ctx context.Context, span *lifespan.LifeSpan) {
-
-        // publish an error directly on the ErrBus
-        span.ErrBus.Publish(lifespan.Error{
-            JobID: "123-456-789",
-            Error: errors.New("testing 123"),
-        })
+    span, _ := lifespan.Run(ctx, func(ctx context.Context, span *lifespan.LifeSpan) {
 		
-        // or publish an error using the utility method on LifeSpan
-        // this will automatically insert the Job UUID and the timestamp of the error
-        span.Error(errors.New("testing 456"))
+		span.ErrBus.Publish(ctx, errors.New("some error"))
 		
     })
+	
+	fmt.Println(<-CentralErrorBus.Subscribe())
 }
 ```
-
-To subscribe you can call the `Subscribe()` method directly on the created MessageBus.
-
-```golang
-errBus.Subscribe()
-```
-
 
 ## Contributing
 
