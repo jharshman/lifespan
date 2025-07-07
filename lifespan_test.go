@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -60,7 +61,7 @@ func Test_RunWithErrorBus(t *testing.T) {
 	span1, _ := lifespan.Run(ctx, jobfunc)
 	span2, _ := lifespan.Run(ctx, jobfunc)
 
-	errorCount := 0
+	errorCount := &atomic.Int32{}
 	span3, _ := lifespan.Run(ctx, func(ctx context.Context, span *lifespan.LifeSpan) {
 		sub := lifespan.DefaultCentralErrorBus.Subscribe()
 	LOOP:
@@ -70,7 +71,7 @@ func Test_RunWithErrorBus(t *testing.T) {
 				break LOOP
 			case msg := <-sub:
 				fmt.Println(msg)
-				errorCount++
+				errorCount.Add(1)
 			}
 		}
 	})
@@ -81,7 +82,18 @@ func Test_RunWithErrorBus(t *testing.T) {
 		span2.Sig <- struct{}{}
 	}
 
-	<-time.After(time.Second * 5)
+LOOP:
+	for {
+		select {
+		case <-time.After(time.Second * 3):
+			break LOOP // kill this check after 3 seconds
+		default:
+			if errorCount.Load() >= 10 {
+				break LOOP
+			}
+		}
+	}
+
 	// kill span1 and span2 with cancel function
 	cancel()
 	// kill span3
@@ -90,6 +102,6 @@ func Test_RunWithErrorBus(t *testing.T) {
 	// close central error bus
 	lifespan.DefaultCentralErrorBus.Close()
 
-	assert.Equal(t, 10, errorCount)
+	assert.Equal(t, int32(10), errorCount.Load())
 
 }

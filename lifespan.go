@@ -61,7 +61,7 @@ func Run(ctx context.Context, job func(ctx context.Context, span *LifeSpan)) (*L
 
 	// The context should contain the job_id and possibly the group_id and is the source of truth for these values.
 	// Create a new Logger from the logHandler and set the job_id and group_id attributes.
-	// This provides a fallback to ensure that we have these values in logs regardless if the user chooses to log with context.
+	// If the user chooses to log with the LifeSpan's logger, these attributes will be present.
 	l := slog.Default().With(
 		slog.String(jobIDKey, JobIDFromContext(ctx)),
 		slog.String(groupIDKey, GroupIDFromContext(ctx)),
@@ -76,6 +76,7 @@ func Run(ctx context.Context, job func(ctx context.Context, span *LifeSpan)) (*L
 
 	go func() {
 		defer close(span.Ack)
+		// closing the LifeSpan's ErrBus ends the goroutine that is reading from ErrBus and writing to the CentralMessageBus.
 		defer close(span.ErrBus)
 		job(ctx, span)
 	}()
@@ -85,20 +86,16 @@ func Run(ctx context.Context, job func(ctx context.Context, span *LifeSpan)) (*L
 
 // Error shortcuts publishing to the ErrBus and inserts the JobID, GroupID, and timestamp into the Error.
 func (span *LifeSpan) Error(ctx context.Context, err error) {
-	e := Error{
+	span.ErrBus <- Error{
+		JobID:     JobIDFromContext(ctx),
+		GroupID:   GroupIDFromContext(ctx),
 		Error:     err,
 		Timestamp: time.Now().UTC(),
 	}
-	if jid, ok := ctx.Value(jobIDKey).(string); ok {
-		e.JobID = jid
-	}
-	if gid, ok := ctx.Value(groupIDKey).(string); ok {
-		e.GroupID = gid
-	}
-
-	span.ErrBus <- e
 }
 
+// JobIDFromContext shortcut function to return the job_id value from the Context.
+// Returns empty string if the field does not exist.
 func JobIDFromContext(ctx context.Context) string {
 	if v, ok := ctx.Value(jobIDKey).(string); ok {
 		return v
@@ -106,6 +103,8 @@ func JobIDFromContext(ctx context.Context) string {
 	return ""
 }
 
+// GroupIDFromContext shortcut function to return the group_id value from the Context.
+// Returns empty string if the field does not exist.
 func GroupIDFromContext(ctx context.Context) string {
 	if v, ok := ctx.Value(groupIDKey).(string); ok {
 		return v

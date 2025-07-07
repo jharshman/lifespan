@@ -24,7 +24,7 @@ type MessageBus[T any] interface {
 	Close()
 }
 
-// CentralMessageBus ...
+// CentralMessageBus provides a generic Message Bus that can be used to aggregate messages from multiple sources.
 type CentralMessageBus[T any] struct {
 	mu     sync.Mutex
 	wg     sync.WaitGroup
@@ -32,14 +32,19 @@ type CentralMessageBus[T any] struct {
 	bus    chan T
 }
 
+// DefaultCentralErrorBus is a CentralMessageBus used specifically for errors with a buffer size of 1024.
 var DefaultCentralErrorBus = NewCentralMessageBus[Error](defaultBufferSize)
 
+// NewCentralMessageBus returns a pointer to a CentralMessageBus with the provided buffer size.
 func NewCentralMessageBus[T any](bufferSize int64) *CentralMessageBus[T] {
 	return &CentralMessageBus[T]{
 		bus: make(chan T, bufferSize),
 	}
 }
 
+// Register adds the channel to the list of channels that are part of the CentralMessageBus.
+// If the CentralMessageBus is closed, a panic will be returned.
+// Otherwise, a goroutine is spawned to handle the writes from the channel to the CentralMessageBus.
 func (cb *CentralMessageBus[T]) Register(ch <-chan T) {
 	cb.mu.Lock()
 	defer cb.mu.Unlock()

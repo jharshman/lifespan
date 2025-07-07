@@ -6,160 +6,114 @@
 ## TL;DR
 
 Package lifespan provides an opinionated method for managing the lifecycle, observability, and coordination of concurrent tasks.
+If you find yourself needing to manage the lifecycle of multiple goroutines and are writing and re-writing "glue" code 
+to keep them organized, this package might be for you.
 
 > "Never start a goroutine without knowing how it will stop"
     - Dave Cheney
 
-## Example Usage
+## Quick Start
 
-In this basic example, we use a closure to define the function that lifespan.Run will execute.
-Here we have a simple control loop and the resulting goroutine will print "hello world" and sleep for one second
-until it is signaled to close.
+The package builds on the concept that every goroutine has a "LifeSpan". The LifeSpan is a simple data type that holds channels
+of communication to its associated goroutine. By way of the LifeSpan, the user can aggregate errors, logs, and signal goroutines to 
+gracefully terminate and also be informed when a goroutine ends.
+
+### The LifeSpan
+```golang
+// LifeSpan holds the communication channels and context for a runnable task.
+type LifeSpan struct {
+	// Sig and Ack are the primary control channels. 
+	// For example, you can write to Sig to signal to close, and read from Ack to acknowledge.
+	Sig, Ack chan struct{}
+	// ErrBus is a unique channel that a runnable task can write to.
+	// All messages written here are aggregated to the CentralErrorBus.
+	ErrBus chan Error
+	// Default logger with extra context injected via Run.
+	Logger *slog.Logger
+}
+```
+
+Running a goroutine and receiving a LifeSpan is as simple as invoking the Run function.
 
 ```golang
-func main() {
-	span, _ := lifespan.Run(ctx, func(ctx context.Context, span *lifespan.LifeSpan) {
-	LOOP:
-		for {
-			select {
-			case <-ctx.Done():
-				break LOOP
-			case <-span.Sig:
-				break LOOP
-			default:
-			}
-			fmt.Println("hello world")
-			time.Sleep(1 * time.Second)
-		}
-		span.Ack <- struct{}{}
-	})
+package main
 
-	time.Sleep(5 * time.Second)
-	fmt.Println("exiting")
+import (
+	"context"
+	"time"
+	
+	"github.com/jharshman/lifespan"
+)
+
+func main() {
+    span, err := lifespan.Run(context.Background(), func(ctx context.Context, span *lifespan.LifeSpan) { 
+		// do work.
+		// log and report errors
+		// you have access to the span and context here as well.
+	})
+	
+	if err != nil {
+		// handle error
+	}
+	
+	// act on span
+	// in this case just waiting for 3 seconds and then closing.
+	<-time.After(time.Second * 3)
 	span.Close()
 }
 ```
 
-Getting a bit more in-depth, we can define custom jobs and even groups of jobs.
-Below we define a Job struct and implement the Runnable interface for it. The implementation 
-is similar to the previous example except here we are demonstrating that each LifeSpan gets a UUID.
+### Groups
+
+You can logically group goroutines together using `NewGroup`. When running as part of a group,
+all goroutines have access to the group's `group_id` which is available when logging or reporting errors.
+All LifeSpans within a group are addressable through the Group via their `job_id`.
 
 ```golang
-type Job struct{}
+package main
 
-func (j *Job) Run(ctx, span *lifespan.LifeSpan) {
-LOOP:
-	for {
-		select {
-		case <-ctx.Done():
-			break LOOP
-		case <-span.Sig:
-			break LOOP
-		default:
-		}
-		fmt.Printf("hello from Job: %s\n", ctx.Value("job_id").(string))
-		time.Sleep(1 * time.Second)
-	}
-	fmt.Printf("done with Job: %s\n", ctx.Value("job_id").(string))
-	span.Ack <- struct{}{}
-}
-```
+import (
+	"context"
+	
+	"github.com/jharshman/lifespan"
+)
 
-Below we take the above implementation and demonstrate different ways to use it.
-
-1. Running a job and responding to an os.Signal like SIGTERM or SIGINT.
-2. Running a job and responding to a context timeout.
-3. Creating a group of jobs.
-4. Stopping select jobs from a group.
-5. Stopping remaining jobs in a group.
-
-```golang
 func main() {
 	
-    j1 := &Job{}
+	// let us say that job1 to 5 are defined.
+	// to group and run them, we can do the following
+	group := lifespan.NewGroup(job1, job2, job3, job4, job5)
 	
-    // 1. Running a job and responding to an os.Signal like SIGTERM or SIGINT
-    
-    span, _ := lifespan.Run(context.Background(), j1.Run)
-    notify := make(chan os.Signal, 1)
-    signal.Notify(notify, syscall.SIGTERM, syscall.SIGINT)
-    <-notify
-    span.Close()
-    
-    // 2. Running a job and responding to a context timeout
-
-	ctx, cancel := context.WithTimeout(span.Ctx, 5*time.Second)
-    span, _ = lifespan.Run(ctx, j1.Run)
-    <-span.Ack
-    
-    // 3. Creating a group of jobs
-    
-    j2 := &Job{}
-    j3 := &Job{}
-    j4 := &Job{}
-    j5 := &Job{}
-    
-    group := lifespan.NewGroup(j1, j2, j3, j4, j5)
-    group.Start()
-    
-    time.Sleep(3 * time.Second)
-    
-    // 4. Stopping individual jobs within a group
-    
-    group.Spans[3].Close()
-    group.Spans[4].Close()
-    
-    time.Sleep(3 * time.Second)
-    
-    // 5. Stop remaining jobs in group
-    
-    group.Close()
-    fmt.Println("all done")
+	// Run the group
+	group.Start()
 }
 ```
 
-## Message Aggregation
+### Error Aggregation
 
-Lifespan provides methods of Log and Error aggregation via an internal Message Bus.
+One challenge LifeSpan tries to solve is error reporting and aggregation from multiple
+sources. When you have a number of goroutines running, how do you report and collect errors? 
+How do you action them? This package provides a `CentralMessageBus` for errors.
+Errors emitted by individual goroutines are aggregated into this Message Bus which can be read from
+by simply subscribing to it. Errors written here are of type `lifespan.Error` which carries
+with it important contextual like `job_id` and `group_id` if applicable.
+
+A utility function is provided to make writing errors as simple as possible.
+```golang
+lifespan.Error(ctx, err)
+```
 
 ### Logging
 
-Lifespan provides a Logger on each LifeSpan. This default Logger includes the `job_id` and `group_id` (if applicable) and are
-pulled from the context.
+Logging is another challenge. Instead of providing a Message Bus implementation for logs,
+or an implementation of `slog.Handler`, the default `slog.Logger` is used.
+Each LifeSpan receives a clone of the default logger with additional attributes like `job_id` and `group_id` added.
+This means if you log with the provided logger on the LifeSpan, you'll always have access to these attributes in the logs.
 
 ```golang
-func main() {
-    // Pass the logHandler into the Run function
-    // Run will put the job_id into the logger so every log can be attributed to the job that emitted it.
-    span, _ := lifespan.Run(ctx, func(ctx context.Context, span *lifespan.LifeSpan) {
-        // example of log usage
-        span.Logger.Info("log at info level") // 2025/06/29 21:27:42 INFO log at info level job_id=8439b094-8192-4d02-a545-887e1bcd0926 group_id=""
-        span.Logger.Warn("log at warn level") // 2025/06/29 21:27:42 WARN log at warn level job_id=8439b094-8192-4d02-a545-887e1bcd0926 group_id=""
-        span.Logger.Error("log at error level") // 2025/06/29 21:27:42 ERROR log at error level job_id=8439b094-8192-4d02-a545-887e1bcd0926 group_id=""
-        })
-}
-```
-
-
-### Errors
-
-Lifespan provides a central message bus for errors. Each LifeSpan is given its own channel to write errors into and this is aggregated into
-a Message Bus that can be subscribed to.
-
-```golang
-    // Creates a logHandler.
-    // The lifespan implementation of log/slog.Handler will write to an underlying implementation of MessageBus for Logs.
-	
-    // Pass the logHandler into the Run function
-    // Run will put the job_id into the logger so every log can be attributed to the job that emitted it.
-    span, _ := lifespan.Run(ctx, func(ctx context.Context, span *lifespan.LifeSpan) {
-		
-		span.ErrBus.Publish(ctx, errors.New("some error"))
-		
-    })
-	
-	fmt.Println(<-CentralErrorBus.Subscribe())
-}
+span.Logger.Info("some info")
+span.Logger.Warn("some warning")
+span.Logger.Error("some error")
 ```
 
 ## Contributing
